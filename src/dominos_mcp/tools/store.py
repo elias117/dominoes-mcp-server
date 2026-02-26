@@ -93,7 +93,7 @@ async def get_menu(
         if sid in state.menu_cache:
             menu_data = state.menu_cache[sid]
         else:
-            store = Store(store_id=sid, country=config.address.country)
+            store = Store(data={"StoreID": sid}, country=config.address.country)
             menu = store.get_menu()
             menu_data = _parse_menu(menu)
             state.menu_cache[sid] = menu_data
@@ -220,7 +220,7 @@ async def search_menu_items(
                 "code": "NO_STORE",
             }
 
-        store = Store(store_id=sid, country=config.address.country)
+        store = Store(data={"StoreID": sid}, country=config.address.country)
         menu = store.get_menu()
 
         # Cache while we have it

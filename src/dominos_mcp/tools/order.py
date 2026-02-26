@@ -4,6 +4,8 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
+import requests as _requests
+
 from pizzapi import Address as PizzaAddress
 from pizzapi import Customer as PizzaCustomer
 from pizzapi import Order as PizzaOrder
@@ -32,11 +34,45 @@ def _build_order(state: ServerState, config: DominosConfig) -> PizzaOrder:
         config.customer.last_name,
         config.customer.email,
         config.customer.phone,
-        address,
     )
 
-    store = Store(store_id=state.store_id, country=config.address.country)
+    store = Store(data={"StoreID": state.store_id}, country=config.address.country)
     order = PizzaOrder(store, customer, address, country=config.address.country)
+
+    # Fix hardcoded US values in pizzapi for Canadian orders
+    if config.address.country.lower() == "ca":
+        order.data["SourceOrganizationURI"] = "order.dominos.ca"
+        order.data["Market"] = "CANADA"
+
+        # Monkey-patch _send to use the Canadian Referer header
+        import types
+
+        def _ca_send(self, url, merge):
+            self.data.update(
+                StoreID=self.store.id,
+                Email=self.customer.email,
+                FirstName=self.customer.first_name,
+                LastName=self.customer.last_name,
+                Phone=self.customer.phone,
+            )
+            for key in ("Products", "StoreID", "Address"):
+                if key not in self.data or not self.data[key]:
+                    raise Exception('order has invalid value for key "%s"' % key)
+
+            headers = {
+                "Referer": "https://order.dominos.ca/en/pages/order/",
+                "Content-Type": "application/json",
+            }
+            r = _requests.post(url=url, headers=headers, json={"Order": self.data})
+            r.raise_for_status()
+            json_data = r.json()
+            if merge:
+                for key, value in json_data["Order"].items():
+                    if value or not isinstance(value, list):
+                        self.data[key] = value
+            return json_data
+
+        order._send = types.MethodType(_ca_send, order)
 
     for item in state.cart:
         for _ in range(item.quantity):
@@ -56,6 +92,30 @@ def _audit_log(message: str) -> None:
             f.write(f"{timestamp} | {message}\n")
     except Exception as e:
         logger.warning(f"Failed to write audit log: {e}")
+
+
+def _estimate_price_from_products(products: list, tax_rate: float = 0.15, delivery_fee: float = 4.99) -> dict:
+    """Estimate pricing from product Pricing data returned by validate()."""
+    subtotal = 0.0
+    for p in products:
+        pricing = p.get("Pricing", {})
+        # Price1-0 = base price with 0 extra toppings
+        try:
+            base = float(pricing.get("Price1-0", 0))
+        except (ValueError, TypeError):
+            base = 0.0
+        qty = p.get("Qty", 1)
+        subtotal += base * qty
+    tax = round(subtotal * tax_rate, 2)
+    total = round(subtotal + tax + delivery_fee, 2)
+    return {
+        "subtotal": round(subtotal, 2),
+        "tax": tax,
+        "delivery_fee": delivery_fee,
+        "discount": 0,
+        "total": total,
+        "note": "Estimated pricing. Actual total confirmed at time of order.",
+    }
 
 
 async def price_order(
@@ -79,21 +139,12 @@ async def price_order(
             }
 
         order = _build_order(state, config)
-        order.price()
+        # Capture product pricing BEFORE validate() overwrites Products
+        products_with_pricing = [dict(p) for p in order.data.get("Products", [])]
+        order.validate()
 
-        amounts = order.data.get("Order", {}).get("Amounts", {})
-        estimate = order.data.get("Order", {}).get(
-            "EstimatedWaitMinutes", ""
-        )
-
-        pricing = {
-            "subtotal": amounts.get("Menu", 0),
-            "discount": amounts.get("Discount", 0),
-            "surcharge": amounts.get("Surcharge", 0),
-            "tax": amounts.get("Tax", 0),
-            "delivery_fee": amounts.get("DeliveryFee", 0),
-            "total": amounts.get("Customer", 0),
-        }
+        estimate = order.data.get("EstimatedWaitMinutes", "")
+        pricing = _estimate_price_from_products(products_with_pricing)
 
         return {
             "success": True,
@@ -201,13 +252,6 @@ async def place_order(
     try:
         order = _build_order(state, config)
 
-        # Set tip
-        if tip_amount > 0:
-            order.data["Order"]["Amounts"] = order.data.get("Order", {}).get(
-                "Amounts", {}
-            )
-            order.data["Order"]["Amounts"]["Tip"] = tip_amount
-
         # Handle scheduled delivery
         formatted_scheduled = None
         if scheduled_time:
@@ -224,7 +268,7 @@ async def place_order(
                         "code": "SCHEDULED_TOO_SOON",
                     }
                 formatted_scheduled = dt.strftime("%Y-%m-%d %H:%M:%S")
-                order.data["Order"]["FutureOrderTime"] = formatted_scheduled
+                order.data["FutureOrderTime"] = formatted_scheduled
             except ValueError:
                 _audit_log(
                     f"PLACE_ORDER | ABORTED | reason=INVALID_TIME | time={scheduled_time}"
@@ -235,15 +279,13 @@ async def place_order(
                     "code": "INVALID_TIME",
                 }
 
-        # Price the order to get total
-        order.price()
-        amounts = order.data.get("Order", {}).get("Amounts", {})
-        total = amounts.get("Customer", 0)
-        if isinstance(total, str):
-            try:
-                total = float(total)
-            except ValueError:
-                total = 0
+        # Capture product pricing BEFORE validate() overwrites Products
+        products_with_pricing = [dict(p) for p in order.data.get("Products", [])]
+        order.validate()
+        pricing = _estimate_price_from_products(products_with_pricing)
+        total = pricing["total"]
+        if tip_amount > 0:
+            total = round(total + tip_amount, 2)
 
         # Layer 3: Max amount check
         max_amount = config.preferences.max_order_amount_cad
@@ -253,19 +295,17 @@ async def place_order(
             )
             return {
                 "success": False,
-                "error": f"Order total ${total:.2f} exceeds max ${max_amount:.2f}",
+                "error": f"Order total ~${total:.2f} exceeds max ${max_amount:.2f}",
                 "code": "OVER_MAX",
             }
 
-        item_summary = [
-            f"{item.code} x{item.quantity}" for item in state.cart
-        ]
+        item_summary = [f"{item.code} x{item.quantity}" for item in state.cart]
 
         # Layer 4: Dry run
         if dry_run:
             _audit_log(
                 f"PLACE_ORDER | DRY_RUN | store={state.store_id} | "
-                f"items={json.dumps(item_summary)} | total={total}"
+                f"items={json.dumps(item_summary)} | estimated_total={total}"
                 + (f" | scheduled={formatted_scheduled}" if formatted_scheduled else "")
             )
             state.cart.clear()
@@ -273,7 +313,7 @@ async def place_order(
                 "success": True,
                 "order_id": "DRY_RUN_NO_ORDER",
                 "dry_run": True,
-                "total_charged": total,
+                "estimated_total": total,
                 "scheduled_for": formatted_scheduled,
                 "message": "DRY RUN — order was NOT placed. Set DRY_RUN=false to place real orders.",
             }
@@ -285,10 +325,13 @@ async def place_order(
             config.payment.cvv,
             config.payment.billing_postal_code,
         )
+        if tip_amount > 0:
+            order.data["Amounts"] = order.data.get("Amounts", {})
+            order.data["Amounts"]["Tip"] = tip_amount
 
         order.place(card)
 
-        order_id = order.data.get("Order", {}).get("OrderID", "UNKNOWN")
+        order_id = order.data.get("OrderID", order.data.get("AdvanceOrderID", "UNKNOWN"))
 
         _audit_log(
             f"PLACE_ORDER | CONFIRMED | store={state.store_id} | "
