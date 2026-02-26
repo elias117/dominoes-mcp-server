@@ -1,0 +1,35 @@
+{
+  "customer": {
+    "first_name": "Your First Name",
+    "last_name": "Your Last Name",
+    "email": "you@example.com",
+    "phone": "9025551234"
+  },
+  "address": {
+    "street": "123 Main St",
+    "unit": "",
+    "city": "Halifax",
+    "region": "NS",
+    "postal_code": "B3J 1H1",
+    "country": "ca",
+    "delivery_instructions": ""
+  },
+  "payment": {
+    "card_number": "4111111111111111",
+    "expiration": "01/28",
+    "cvv": "123",
+    "billing_postal_code": "B3J 1H1"
+  },
+  "preferences": {
+    "order_type": "Delivery",
+    "default_tip_percent": 15,
+    "confirm_before_order": true,
+    "max_order_amount_cad": 100.00,
+    "preferred_store_id": null
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "log_level": "INFO"
+  }
+}

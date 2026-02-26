@@ -1,0 +1,15 @@
+.git/
+.gitignore
+config.json
+config.json.example
+data/
+tests/
+*.pyc
+__pycache__/
+.venv/
+venv/
+.env
+*.md
+.DS_Store
+.idea/
+.vscode/
