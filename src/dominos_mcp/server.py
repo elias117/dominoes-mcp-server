@@ -5,7 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 
 from dominos_mcp.config import DominosConfig, load_config
 from dominos_mcp.state import ServerState
@@ -43,9 +43,14 @@ async def lifespan(server: FastMCP):
     logger.info("Shutting down Domino's MCP server")
 
 
+host = os.environ.get("HOST", "0.0.0.0")
+port = int(os.environ.get("PORT", "8000"))
+
 mcp = FastMCP(
     "Domino's Pizza MCP Server",
     lifespan=lifespan,
+    host=host,
+    port=port,
 )
 
 
@@ -61,7 +66,7 @@ def _get_deps(ctx) -> tuple[ServerState, DominosConfig]:
 
 @mcp.tool()
 async def tool_find_nearby_stores(
-    ctx: Any,
+    ctx: Context,
     street: str = "",
     city: str = "",
     region: str = "",
@@ -80,7 +85,7 @@ async def tool_find_nearby_stores(
 
 @mcp.tool()
 async def tool_get_menu(
-    ctx: Any,
+    ctx: Context,
     store_id: str = "",
     category: str = "All",
 ) -> str:
@@ -93,7 +98,7 @@ async def tool_get_menu(
 
 @mcp.tool()
 async def tool_search_menu_items(
-    ctx: Any,
+    ctx: Context,
     query: str,
     store_id: str = "",
 ) -> str:
@@ -109,7 +114,7 @@ async def tool_search_menu_items(
 
 
 @mcp.tool()
-async def tool_get_cart(ctx: Any) -> str:
+async def tool_get_cart(ctx: Context) -> str:
     """View the current cart contents and running total."""
     state, config = _get_deps(ctx)
     result = await get_cart(state, config)
@@ -118,7 +123,7 @@ async def tool_get_cart(ctx: Any) -> str:
 
 @mcp.tool()
 async def tool_add_to_cart(
-    ctx: Any,
+    ctx: Context,
     item_code: str,
     quantity: int = 1,
     options: Optional[dict] = None,
@@ -135,7 +140,7 @@ async def tool_add_to_cart(
 
 
 @mcp.tool()
-async def tool_remove_from_cart(ctx: Any, cart_index: int) -> str:
+async def tool_remove_from_cart(ctx: Context, cart_index: int) -> str:
     """Remove an item from the cart by its cart index (from get_cart response)."""
     state, config = _get_deps(ctx)
     result = await remove_from_cart(state, config, cart_index)
@@ -143,7 +148,7 @@ async def tool_remove_from_cart(ctx: Any, cart_index: int) -> str:
 
 
 @mcp.tool()
-async def tool_clear_cart(ctx: Any) -> str:
+async def tool_clear_cart(ctx: Context) -> str:
     """Empty the entire cart. Also clears the selected store."""
     state, config = _get_deps(ctx)
     result = await clear_cart(state, config)
@@ -154,7 +159,7 @@ async def tool_clear_cart(ctx: Any) -> str:
 
 
 @mcp.tool()
-async def tool_price_order(ctx: Any) -> str:
+async def tool_price_order(ctx: Context) -> str:
     """Get the full pricing breakdown for the current cart including taxes and fees.
     Does NOT place the order. Use this before place_order to show the user what they'll pay."""
     state, config = _get_deps(ctx)
@@ -163,7 +168,7 @@ async def tool_price_order(ctx: Any) -> str:
 
 
 @mcp.tool()
-async def tool_validate_order(ctx: Any) -> str:
+async def tool_validate_order(ctx: Context) -> str:
     """Validate the current order without placing it. Checks item availability,
     delivery address, minimum order amount. Returns any validation errors."""
     state, config = _get_deps(ctx)
@@ -173,7 +178,7 @@ async def tool_validate_order(ctx: Any) -> str:
 
 @mcp.tool()
 async def tool_place_order(
-    ctx: Any,
+    ctx: Context,
     confirm_order: str,
     tip_amount: float = 0,
     scheduled_time: str = "",
@@ -194,7 +199,7 @@ async def tool_place_order(
 
 @mcp.tool()
 async def tool_track_order(
-    ctx: Any,
+    ctx: Context,
     phone: str = "",
     store_id: str = "",
 ) -> str:
@@ -206,7 +211,5 @@ async def tool_track_order(
 
 
 if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8000"))
     logger.info(f"Starting MCP server on {host}:{port}")
-    mcp.run(transport="streamable-http", host=host, port=port)
+    mcp.run(transport="streamable-http")

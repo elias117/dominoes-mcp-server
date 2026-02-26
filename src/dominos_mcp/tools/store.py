@@ -37,24 +37,24 @@ async def find_nearby_stores(
         address = _make_address(s, c, r, p, country)
         results = address.nearby_stores(service=order_type)
 
+        # results is a list of Store objects
         stores = []
-        for store_data in results.stores[:5]:
-            store_id = str(store_data.get("StoreID", ""))
-            is_open = store_data.get("IsOnlineNow", False) and store_data.get(
-                "IsOpen", False
-            )
-            service_info = store_data.get("ServiceMethodEstimateMinutes", {})
+        for store_obj in results[:5]:
+            d = store_obj.data
+            store_id = str(d.get("StoreID", store_obj.id))
+            is_open = d.get("IsOnlineNow", False) and d.get("AllowDeliveryOrders", False)
+            service_info = d.get("ServiceMethodEstimatedWaitMinutes", {})
             delivery_info = service_info.get("Delivery", {})
 
             stores.append(
                 {
                     "store_id": store_id,
-                    "address": store_data.get("AddressDescription", ""),
-                    "phone": store_data.get("Phone", ""),
+                    "address": d.get("AddressDescription", "").strip(),
+                    "phone": d.get("Phone", ""),
                     "is_open": is_open,
                     "delivery_minutes_min": delivery_info.get("Min", None),
                     "delivery_minutes_max": delivery_info.get("Max", None),
-                    "minimum_delivery_order_amount": store_data.get(
+                    "minimum_delivery_order_amount": d.get(
                         "MinimumDeliveryOrderAmount", None
                     ),
                 }

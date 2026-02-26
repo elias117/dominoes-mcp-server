@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Install dependencies first (layer caching)
 COPY pyproject.toml ./
-RUN uv sync --frozen --no-dev --no-install-project 2>/dev/null || uv pip install --system -r <(uv pip compile pyproject.toml)
+RUN uv pip install --system mcp[cli] pizzapi pydantic requests uvicorn
 
 # Copy source
 COPY src/ ./src/
