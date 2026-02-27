@@ -12,7 +12,6 @@ from dominos_mcp.state import ServerState
 from dominos_mcp.tools.cart import add_to_cart, clear_cart, get_cart, remove_from_cart
 from dominos_mcp.tools.order import place_order, price_order, validate_order
 from dominos_mcp.tools.store import find_nearby_stores, get_menu, search_menu_items
-from dominos_mcp.tools.tracking import track_order
 
 # Configure logging
 log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -193,21 +192,6 @@ async def tool_place_order(
     result = await place_order(state, config, confirm_order, tip_amount, scheduled_time)
     return json.dumps(result)
 
-
-# --- Tracking Tool ---
-
-
-@mcp.tool()
-async def tool_track_order(
-    ctx: Context,
-    phone: str = "",
-    store_id: str = "",
-) -> str:
-    """Track the status of a placed order using the customer's phone number.
-    Omit phone to use the config default. Omit store_id to use the last-used store."""
-    state, config = _get_deps(ctx)
-    result = await track_order(state, config, phone, store_id)
-    return json.dumps(result)
 
 
 if __name__ == "__main__":
