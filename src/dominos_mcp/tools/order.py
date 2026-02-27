@@ -60,8 +60,13 @@ def _build_order(state: ServerState, config: DominosConfig) -> PizzaOrder:
                     raise Exception('order has invalid value for key "%s"' % key)
 
             headers = {
+                "Content-Type": "application/json; charset=utf-8",
+                "Accept": "application/json",
                 "Referer": "https://order.dominos.ca/en/pages/order/",
-                "Content-Type": "application/json",
+                "Origin": "https://order.dominos.ca",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "DPZ-Language": "en",
+                "DPZ-Market": "CANADA",
             }
             r = _requests.post(url=url, headers=headers, json={"Order": self.data})
             r.raise_for_status()
@@ -282,6 +287,10 @@ async def place_order(
         # Capture product pricing BEFORE validate() overwrites Products
         products_with_pricing = [dict(p) for p in order.data.get("Products", [])]
         order.validate()
+        # Re-apply CA overrides after validate() merges the response
+        if config.address.country.lower() == "ca":
+            order.data["Market"] = "CANADA"
+            order.data["SourceOrganizationURI"] = "order.dominos.ca"
         pricing = _estimate_price_from_products(products_with_pricing)
         total = pricing["total"]
         if tip_amount > 0:
@@ -319,19 +328,37 @@ async def place_order(
             }
 
         # Place the real order
-        card = PaymentObject(
-            config.payment.card_number,
-            config.payment.expiration,
-            config.payment.cvv,
-            config.payment.billing_postal_code,
+        if config.payment.pay_at_door:
+            # Cash / pay at door — set payment manually and skip the price URL call
+            if tip_amount > 0:
+                order.data["Amounts"] = order.data.get("Amounts", {})
+                order.data["Amounts"]["Tip"] = tip_amount
+            order.data["Payments"] = [{"Type": "Cash"}]
+            result = order._send(order.urls.place_url(), False)
+        else:
+            card = PaymentObject(
+                config.payment.card_number,
+                config.payment.expiration,
+                config.payment.cvv,
+                config.payment.billing_postal_code,
+            )
+            if tip_amount > 0:
+                order.data["Amounts"] = order.data.get("Amounts", {})
+                order.data["Amounts"]["Tip"] = tip_amount
+            result = order.place(card)
+
+        # Check place result status
+        if isinstance(result, dict) and result.get("Status") == -1:
+            raise Exception(f"Place order failed: {result}")
+
+        # Order ID from result (merge=False) or fallback to order.data
+        result_order = result.get("Order", {}) if isinstance(result, dict) else {}
+        order_id = (
+            result_order.get("OrderID")
+            or result_order.get("AdvanceOrderID")
+            or order.data.get("OrderID")
+            or order.data.get("AdvanceOrderID", "UNKNOWN")
         )
-        if tip_amount > 0:
-            order.data["Amounts"] = order.data.get("Amounts", {})
-            order.data["Amounts"]["Tip"] = tip_amount
-
-        order.place(card)
-
-        order_id = order.data.get("OrderID", order.data.get("AdvanceOrderID", "UNKNOWN"))
 
         _audit_log(
             f"PLACE_ORDER | CONFIRMED | store={state.store_id} | "

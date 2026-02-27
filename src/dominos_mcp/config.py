@@ -23,10 +23,11 @@ class Address(BaseModel):
 
 
 class Payment(BaseModel):
-    card_number: str
-    expiration: str  # MM/YY
-    cvv: str
-    billing_postal_code: str
+    card_number: str = ""
+    expiration: str = ""  # MM/YY
+    cvv: str = ""
+    billing_postal_code: str = ""
+    pay_at_door: bool = False  # True = cash/card at door (no online payment)
 
 
 class Preferences(BaseModel):
