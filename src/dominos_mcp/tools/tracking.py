@@ -8,8 +8,18 @@ from dominos_mcp.state import ServerState
 
 logger = logging.getLogger(__name__)
 
-# Tracking endpoint for Canada
+# Tracking endpoint for Canada (note: Dominos CA tracking is not publicly
+# accessible via the unofficial API — this endpoint returns 404 consistently)
 TRACKER_URL = "https://order.dominos.ca/orderstorage/GetTrackerData"
+
+CA_HEADERS = {
+    "Accept": "application/json",
+    "Origin": "https://order.dominos.ca",
+    "Referer": "https://order.dominos.ca/en/pages/order/",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "DPZ-Language": "en",
+    "DPZ-Market": "CANADA",
+}
 
 
 async def track_order(
@@ -37,7 +47,7 @@ async def track_order(
         if sid:
             params["StoreID"] = sid
 
-        resp = requests.get(TRACKER_URL, params=params, timeout=15)
+        resp = requests.get(TRACKER_URL, params=params, headers=CA_HEADERS, timeout=15)
         resp.raise_for_status()
         data = resp.json()
 
