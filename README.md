@@ -1,10 +1,10 @@
 # Domino's Pizza MCP Server
 
-An MCP (Model Context Protocol) server that wraps the unofficial Domino's Pizza API. Enables AI assistants to find stores, browse menus, build orders, place orders, schedule future deliveries, and track orders — all via MCP tools.
+An MCP (Model Context Protocol) server that wraps the unofficial Domino's Pizza API. Enables AI assistants to find stores, browse menus, build orders, place orders, and schedule future deliveries — all via MCP tools.
 
 ## Features
 
-- **11 MCP tools**: find_nearby_stores, get_menu, search_menu_items, get_cart, add_to_cart, remove_from_cart, clear_cart, price_order, validate_order, place_order, track_order
+- **10 MCP tools**: find_nearby_stores, get_menu, search_menu_items, get_cart, add_to_cart, remove_from_cart, clear_cart, price_order, validate_order, place_order
 - **Scheduled delivery**: Set a future delivery time via ISO 8601 timestamp
 - **Safety gates**: Confirmation string, max order amount guard, DRY_RUN mode
 - **Audit logging**: Every place_order attempt logged to `/data/orders.log`
@@ -52,7 +52,7 @@ mcporter config add dominosmcp --url http://localhost:8000/mcp --scope home
 
 ```bash
 mcporter list dominosmcp --schema
-# Should list all 11 tools
+# Should list all 10 tools
 ```
 
 ## Usage Examples
@@ -79,11 +79,6 @@ place_order(
   tip_amount=3.00,
   scheduled_time="2026-02-27T18:30:00"
 )
-```
-
-### Track an order
-```
-track_order → uses config phone number and last store
 ```
 
 ## Configuration
