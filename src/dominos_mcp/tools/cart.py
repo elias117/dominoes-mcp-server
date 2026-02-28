@@ -42,6 +42,8 @@ async def add_to_cart(
 ) -> dict[str, Any]:
     """Add an item to the current order."""
     try:
+        sid = state.store_id or (str(config.preferences.preferred_store_id) if getattr(config.preferences, "preferred_store_id", None) else None)
+        state.store_id = sid
         if not state.store_id:
             return {
                 "success": False,
@@ -63,6 +65,7 @@ async def add_to_cart(
             special_instructions=special_instructions,
         )
         state.cart.append(cart_item)
+        state.save()
 
         cart_index = len(state.cart) - 1
 
@@ -115,5 +118,6 @@ async def clear_cart(
     """Empty the entire cart and clear the selected store."""
     state.cart.clear()
     state.store_id = None
+    state.save()
     state.store_info = {}
     return {"success": True, "message": "Cart cleared."}

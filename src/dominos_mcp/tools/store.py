@@ -64,6 +64,7 @@ async def find_nearby_stores(
         for store in stores:
             if store["is_open"]:
                 state.store_id = store["store_id"]
+                state.save()
                 break
 
         return {"success": True, "stores": stores}
@@ -81,7 +82,7 @@ async def get_menu(
 ) -> dict[str, Any]:
     """Get the full menu for a store. Returns categorized menu items."""
     try:
-        sid = store_id or state.store_id
+        sid = store_id or state.store_id or (str(config.preferences.preferred_store_id) if getattr(config.preferences, "preferred_store_id", None) else None)
         if not sid:
             return {
                 "success": False,
@@ -212,7 +213,7 @@ async def search_menu_items(
 ) -> dict[str, Any]:
     """Search for specific items in the store menu by name or description."""
     try:
-        sid = store_id or state.store_id
+        sid = store_id or state.store_id or (str(config.preferences.preferred_store_id) if getattr(config.preferences, "preferred_store_id", None) else None)
         if not sid:
             return {
                 "success": False,

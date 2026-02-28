@@ -129,6 +129,7 @@ async def price_order(
 ) -> dict[str, Any]:
     """Get the full pricing breakdown for the current cart including taxes and fees."""
     try:
+        state.store_id = state.store_id or (str(config.preferences.preferred_store_id) if getattr(config.preferences, "preferred_store_id", None) else None)
         if not state.store_id:
             return {
                 "success": False,
@@ -169,6 +170,7 @@ async def validate_order(
 ) -> dict[str, Any]:
     """Validate the current order without placing it."""
     try:
+        state.store_id = state.store_id or (str(config.preferences.preferred_store_id) if getattr(config.preferences, "preferred_store_id", None) else None)
         if not state.store_id:
             return {
                 "success": False,
